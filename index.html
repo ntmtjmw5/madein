@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>天気タスクプランナー</title>
+<link rel="preconnect" href="https://calendar.google.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://generativelanguage.googleapis.com">
+<link rel="preconnect" href="https://api.open-meteo.com">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6fde">
+<style>
+:root{
+  --bg:#f6f5f2;--card:#ffffff;--ink:#22252a;--sub:#6b7078;--line:#e3e1dc;
+  --accent:#2f6fde;--accent-ink:#fff;--good:#2e8b57;--warn:#c9761a;--bad:#c0392b;--chip:#eef2fb;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#16181c;--card:#1f2228;--ink:#e8e9eb;--sub:#9aa0a8;--line:#30343b;
+  --accent:#5b8ff0;--chip:#26303f;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px;line-height:1.5}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0;padding:12px 16px 4px}
+nav{display:flex;gap:4px;padding:4px 12px 8px}
+nav button{flex:1;border:0;background:transparent;color:var(--sub);padding:8px;border-radius:8px;font-size:14px}
+nav button.on{background:var(--chip);color:var(--ink);font-weight:600}
+main{padding:12px 16px 80px;max-width:720px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--sub);margin:8px 0 2px}
+input,textarea,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:15px;font-family:inherit}
+textarea{min-height:60px;resize:vertical}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+button.btn{border:0;background:var(--accent);color:var(--accent-ink);padding:9px 14px;border-radius:8px;font-size:14px;font-weight:600}
+button.ghost{border:1px solid var(--line);background:transparent;color:var(--ink);padding:7px 10px;border-radius:8px;font-size:13px}
+button.danger{color:var(--bad)}
+.muted{color:var(--sub);font-size:13px}
+.task-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.task-title{font-weight:600}
+.subs{margin:8px 0 0;padding:0;list-style:none}
+.subs li{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0;border-top:1px dashed var(--line)}
+.subs li .res{flex-basis:100%;padding-left:24px;color:var(--sub);font-size:12px}
+.frame{border:0;width:100%;height:70vh;min-height:420px;border-radius:10px;background:#fff}
+.brief{background:var(--chip);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:13px}
+.brief b{display:inline-block;min-width:3.5em}
+.brief ul{margin:4px 0 0;padding-left:18px}
+.brief a{color:var(--accent);word-break:break-all}
+[data-swipe]{touch-action:pan-y;transition:transform .18s,opacity .18s;position:relative;background:var(--card)}
+[data-swipe].dragging{transition:none}
+.undo{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;gap:12px;align-items:center;background:var(--ink);color:var(--bg);padding:8px 8px 8px 14px;border-radius:8px;font-size:13px;z-index:20}
+.undo button{border:0;background:transparent;color:#8fb6ff;font-weight:600;font-size:13px;padding:4px 8px}
+.idea{padding:8px 0;border-top:1px dashed var(--line);display:flex;gap:8px;align-items:center}
+.idea:first-child{border-top:0}
+.cal-loading{padding:40px 0;text-align:center;color:var(--sub)}
+a.daylink{color:var(--accent);font-size:12px;font-weight:400;text-decoration:none;margin-left:8px}
+.subs li input[type=text]{flex:1;padding:6px 8px;font-size:14px}
+.subs li input[type=number]{width:64px;flex:none;padding:6px;font-size:14px}
+.chip{display:inline-block;padding:1px 8px;border-radius:99px;background:var(--chip);font-size:12px;white-space:nowrap}
+.chip.out{background:#e6f4ea;color:#1e6b3a}
+@media (prefers-color-scheme: dark){.chip.out{background:#1e3527;color:#8fd3a5}}
+.wx{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.wx .d{flex:none;width:72px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 4px;font-size:12px}
+.wx .d .ic{font-size:22px}
+.wx .d.rain{border-color:var(--warn)}
+.day-h{font-weight:600;margin:16px 0 6px;display:flex;justify-content:space-between}
+.plan{display:flex;gap:10px;align-items:center}
+.plan .t{font-variant-numeric:tabular-nums;color:var(--sub);font-size:13px;width:46px;flex:none}
+.plan .b{flex:1}
+.flag{color:var(--warn);font-size:12px}
+.hidden{display:none}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:.92}
+details summary{cursor:pointer;color:var(--sub);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>天気タスクプランナー</h1>
+  <nav>
+    <button data-tab="tasks" class="on">タスク</button>
+    <button data-tab="plan">提案</button>
+    <button data-tab="cal">カレンダー</button>
+    <button data-tab="settings">設定</button>
+  </nav>
+</header>
+
+<main>
+<!-- タスク -->
+<section id="tab-tasks">
+  <div class="card">
+    <div class="task-head">
+      <div><b>大タスクの提案</b><div class="muted">季節と、これまでのタスクから考えます。いらない案は左にスワイプで消せます。</div></div>
+      <button class="btn" style="flex:none" id="idea-btn">提案してもらう</button>
+    </div>
+    <div id="idea-list"></div>
+  </div>
+  <div class="card">
+    <label>タスク</label>
+    <input id="t-title" placeholder="例: 冬物の衣替え">
+    <label>メモ(任意・AIに送られます)</label>
+    <textarea id="t-note" placeholder="例: ベランダで布団も干したい"></textarea>
+    <div class="row">
+      <div><label>期限(任意)</label><input id="t-due" type="date"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="t-add">追加</button>
+    </div>
+  </div>
+  <div id="task-list"></div>
+</section>
+
+<!-- 提案 -->
+<section id="tab-plan" class="hidden">
+  <div class="card">
+    <div class="task-head">
+      <div><b id="wx-place"></b> <span class="muted" id="wx-time"></span></div>
+      <button class="ghost" id="wx-reload">天気を更新</button>
+    </div>
+    <div class="wx" id="wx-strip" style="margin-top:8px"></div>
+    <p class="muted" style="margin:8px 0 0">屋外の小タスクは、降水確率が設定値未満の日にだけ入れます。カレンダーの空き状況は見ていないので、時間は各自で調整してください。</p>
+  </div>
+  <div id="plan-list"></div>
+</section>
+
+<!-- カレンダー(表示のみ) -->
+<section id="tab-cal" class="hidden">
+  <div class="card">
+    <div class="row">
+      <select id="cal-mode" style="flex:1"><option value="WEEK">週</option><option value="MONTH">月</option><option value="AGENDA">予定リスト</option></select>
+      <button class="ghost" style="flex:none" id="cal-open">Googleカレンダーを開く</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0">Googleのページをそのまま表示しているだけで、このツールやAIは中身を読めません。表示されない場合は「Googleカレンダーを開く」を使ってください。</p>
+  </div>
+  <div id="cal-box"></div>
+</section>
+
+<!-- 設定 -->
+<section id="tab-settings" class="hidden">
+  <div class="card">
+    <b>Google Gemini API</b>
+    <p class="muted">タスク名・メモ・期限と、下の指示文だけを送ります。キーはこの端末のブラウザにだけ保存されます。</p>
+    <label>APIキー</label>
+    <input id="s-key" type="password" autocomplete="off" placeholder="AIza...">
+    <label>モデル</label>
+    <div class="row"><select id="s-model"></select><button class="ghost" style="flex:none" id="s-models">一覧を取得</button></div>
+    <p class="muted">無料枠では、送った内容がGoogleのサービス改善に使われることがあります。</p>
+    <label>AIへの指示(毎回送ります)</label>
+    <textarea id="s-inst" style="min-height:160px"></textarea>
+    <div class="row" style="margin-top:6px"><button class="ghost" style="flex:none" id="s-inst-reset">初期の指示に戻す</button></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--ink)">
+      <input type="checkbox" id="s-search" style="width:auto"> Google検索で調べられることはAIが調べる
+    </label>
+    <p class="muted">検索を使うと、タスクの内容が検索語としてGoogle検索にも送られます。検索の無料枠を超えると、自動で検索なしに切り替えます。</p>
+  </div>
+  <div class="card">
+    <b>カレンダー表示</b>
+    <label>表示するカレンダー(1行に1つ「カレンダーID 色」)</label>
+    <textarea id="s-calid" placeholder="yourname@gmail.com #039BE5&#10;家族用のカレンダーID #33B679" autocomplete="off"></textarea>
+    <p class="muted">表示専用です。予定の内容はこのツールにもAIにも渡りません。色はカレンダーごとに付けられます。予定ごとに個別に付けた色は、Googleの埋め込み表示では反映されません。<br>使える色の例: #039BE5 青 / #33B679 緑 / #F6BF26 黄 / #F4511E 橙 / #D50000 赤 / #8E24AA 紫 / #616161 灰</p>
+  </div>
+  <div class="card">
+    <b>天気(Open-Meteo)</b>
+    <p class="muted">送るのは緯度経度だけです。タスクは送りません。</p>
+    <label>地名(表示用)</label><input id="s-place">
+    <div class="row">
+      <div><label>緯度</label><input id="s-lat" type="number" step="0.0001"></div>
+      <div><label>経度</label><input id="s-lon" type="number" step="0.0001"></div>
+    </div>
+    <label>屋外タスクを避ける降水確率(%以上)</label><input id="s-rain" type="number" min="0" max="100">
+  </div>
+  <div class="card">
+    <b>予定の組み方</b>
+    <div class="row">
+      <div><label>平日の開始</label><input id="s-wd-start" type="time"></div>
+      <div><label>平日の上限(分)</label><input id="s-wd-cap" type="number" min="0"></div>
+    </div>
+    <div class="row">
+      <div><label>休日の開始</label><input id="s-we-start" type="time"></div>
+      <div><label>休日の上限(分)</label><input id="s-we-cap" type="number" min="0"></div>
+    </div>
+    <label>予定の長さを入れる単位</label>
+    <select id="s-group"><option value="sub">小タスクごと</option><option value="day">1日分をまとめて1件</option></select>
+  </div>
+  <div class="card">
+    <div class="row">
+      <button class="btn" id="s-save">保存</button>
+    </div>
+    <details style="margin-top:12px"><summary>バックアップ</summary>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="s-export">書き出し</button>
+        <button class="ghost" id="s-import">読み込み</button>
+      </div>
+      <input type="file" id="s-file" accept=".json" class="hidden">
+    </details>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+<div class="undo hidden" id="undo"><span id="undo-msg"></span><button id="undo-btn">元に戻す</button></div>
+
+<script>
+'use strict';
+const KEY = 'weather_task_planner_v1';
+const DEFAULT_INST =
+`タスク分解の目的は、取りかかりやすくすることです。
+そのために、まず次の3つをはっきりさせてください。
+・論点:このタスクで決めること、答えを出すべき問い
+・仮説:現時点で一番ありそうな答えや結果
+・ゴール:終わったときにどういう状態になっているか
+
+ネットで調べれば分かることは、小タスクにせず、あなたが調べて結果を書いてください。
+「〜について調べる」「〜を確認する」のような、検索で済む小タスクは作らないでください。
+小タスクは、本人が手や体を動かす必要があるもの、本人の判断や好みが必要なものだけにしてください。
+各小タスクには、終わると何が分かるか・何ができるようになるかを一言添えてください。`;
+const DEF = {
+  tasks: [],
+  settings: {
+    apiKey: '', model: 'gemini-2.5-flash', inst: DEFAULT_INST, search: true, calId: '', cals: '',
+    place: '静岡市', lat: 34.9756, lon: 138.3828, rain: 40,
+    wdStart: '19:00', wdCap: 90, weStart: '10:00', weCap: 180, group: 'sub'
+  },
+  weather: null,
+  history: []
+};
+let S = load();
+
+function load(){
+  try{
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if(!v) return structuredClone(DEF);
+    return {...structuredClone(DEF), ...v, settings:{...DEF.settings, ...(v.settings||{})}};
+  }catch(e){ return structuredClone(DEF); }
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast('保存に失敗しました'); } }
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2,10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x===b));
+  ['tasks','plan','cal','settings'].forEach(id => $('#tab-'+id).classList.toggle('hidden', id!==b.dataset.tab));
+  if(b.dataset.tab==='plan'){ ensureWeather().then(renderPlan); }
+  if(b.dataset.tab==='cal'){ renderCal(); }
+});
+
+/* ---------- 日付ユーティリティ ---------- */
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseYmd = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const WD = ['日','月','火','水','木','金','土'];
+const label = s => { const d=parseYmd(s); return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`; };
+const isWeekend = s => [0,6].includes(parseYmd(s).getDay());
+const toMin = hm => { const [h,m]=hm.split(':').map(Number); return h*60+m; };
+const fromMin = m => `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+
+/* ---------- タスク ---------- */
+$('#t-add').onclick = () => {
+  const title = $('#t-title').value.trim();
+  if(!title){ toast('タスク名を入れてください'); return; }
+  S.tasks.push({id:uid(), title, note:$('#t-note').value.trim(), due:$('#t-due').value||'', subs:[], created:Date.now()});
+  $('#t-title').value=''; $('#t-note').value=''; $('#t-due').value='';
+  save(); renderTasks(); toast('追加しました');
+};
+
+function renderTasks(){
+  const el = $('#task-list');
+  if(!S.tasks.length){ el.innerHTML = '<p class="muted">タスクはまだありません。思いついたものを書きためておき、「AIで分解」を押してください。</p>'; return; }
+  el.innerHTML = S.tasks.map(t => `
+    <div class="card" data-id="${t.id}">
+      <div class="task-head">
+        <div>
+          <div class="task-title">${esc(t.title)}</div>
+          <div class="muted">${t.due?'期限 '+label(t.due):'期限なし'}${t.note?'・'+esc(t.note):''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex:none">
+          <button class="ghost" data-act="finish">完了</button>
+          <button class="ghost danger" data-act="del">削除</button>
+        </div>
+      </div>
+      ${briefHtml(t.brief)}
+      <ul class="subs">
+        ${t.subs.map((s,i)=>`
+          <li data-i="${i}" data-swipe="sub:${t.id}:${s.id}">
+            <input type="checkbox" data-act="done" ${s.done?'checked':''} title="完了">
+            <input type="text" data-act="stitle" value="${esc(s.title)}">
+            <input type="number" data-act="smin" value="${s.minutes}" min="5" step="5" title="分">
+            <button class="ghost" data-act="sout" title="屋外かどうか">${s.outdoor?'屋外':'屋内'}</button>
+            <button class="ghost danger" data-act="sdel">×</button>
+            ${s.result?`<div class="res">→ ${esc(s.result)}</div>`:''}
+          </li>`).join('')}
+      </ul>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" data-act="ai">${t.subs.length?'AIで分解し直す':'AIで分解'}</button>
+        <button class="ghost" style="flex:none" data-act="sadd">手動で追加</button>
+      </div>
+    </div>`).join('');
+}
+
+$('#task-list').addEventListener('click', async e => {
+  const card = e.target.closest('.card'); if(!card) return;
+  const t = S.tasks.find(x => x.id===card.dataset.id); const act = e.target.dataset.act;
+  const li = e.target.closest('li'); const s = li ? t.subs[+li.dataset.i] : null;
+  if(act==='del'){ if(confirm(`「${t.title}」を削除しますか?`)){ addHistory(t,'deleted'); S.tasks = S.tasks.filter(x=>x!==t); save(); renderTasks(); } }
+  else if(act==='finish'){ addHistory(t,'done'); S.tasks = S.tasks.filter(x=>x!==t); save(); renderTasks(); toast('完了にしました。今後の提案の参考にします'); }
+  else if(act==='sdel'){ t.subs.splice(+li.dataset.i,1); save(); renderTasks(); }
+  else if(act==='sout'){ s.outdoor = !s.outdoor; s.pin=null; save(); renderTasks(); }
+  else if(act==='done'){ s.done = e.target.checked; save(); }
+  else if(act==='sadd'){ t.subs.push({id:uid(), title:'新しい小タスク', minutes:30, outdoor:false, done:false}); save(); renderTasks(); }
+  else if(act==='ai'){
+    if(t.subs.length && !confirm('今の小タスクを置き換えます。よろしいですか?')) return;
+    e.target.disabled = true; e.target.textContent = '分解中…';
+    try{ const r = await decompose(t); t.subs = r.subs; t.brief = r.brief; save(); toast(r.note || '分解しました'); }
+    catch(err){ toast(err.message); }
+    renderTasks();
+  }
+});
+$('#task-list').addEventListener('change', e => {
+  const card = e.target.closest('.card'); const li = e.target.closest('li'); if(!card||!li) return;
+  const s = S.tasks.find(x=>x.id===card.dataset.id).subs[+li.dataset.i];
+  if(e.target.dataset.act==='stitle') s.title = e.target.value;
+  if(e.target.dataset.act==='smin') s.minutes = Math.max(5, +e.target.value||30);
+  save();
+});
+
+/* ---------- Gemini(タスクの内容だけを送る) ---------- */
+async function decompose(t){
+  const {apiKey, model, inst, search} = S.settings;
+  if(!apiKey) throw new Error('設定でAPIキーを入れてください');
+  const prompt =
+`次のタスクについて、論点・仮説・ゴールを立て、調べて分かることは調べた結果を書き、
+本人がやる必要のあることだけを小タスク(3〜8個、実行順)にしてください。
+各小タスクには、目安の所要時間(分、5〜120)と、屋外で行う作業かどうかを付けてください。
+
+タスク: ${t.title}
+メモ: ${t.note || 'なし'}
+期限: ${t.due || 'なし'}
+
+返答は次の形のJSONだけにしてください(説明文やコードブロックの記号は付けない)。
+{"issue":"論点","hypothesis":"仮説","goal":"ゴール",
+ "research":[{"q":"調べたこと","a":"分かったこと(2〜3文)"}],
+ "subtasks":[{"title":"小タスク","minutes":30,"outdoor":false,"result":"終わると何が分かる/できるか"}]}`;
+
+  const call = async useSearch => {
+    const body = {
+      systemInstruction:{parts:[{text: inst || DEFAULT_INST}]},
+      contents:[{role:'user', parts:[{text:prompt}]}]
+    };
+    // 検索ツールとJSONモードは併用できないモデルがあるので、検索時は文章からJSONを取り出す
+    if(useSearch) body.tools = [{google_search:{}}];
+    else body.generationConfig = {responseMimeType:'application/json'};
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey}, body:JSON.stringify(body)
+    });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) throw Object.assign(new Error('AIエラー: ' + (j.error?.message || res.status)), {status:res.status});
+    return j;
+  };
+
+  let j, note = '';
+  if(search){
+    try{ j = await call(true); }
+    catch(e){ j = await call(false); note = '検索なしで分解しました'; }
+  } else j = await call(false);
+
+  const cand = j.candidates?.[0];
+  const text = cand?.content?.parts?.map(p=>p.text||'').join('') || '';
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  let data; try{ data = JSON.parse(text.slice(a, b+1)); }catch(e){ throw new Error('AIの返答を読めませんでした'); }
+  const list = (data.subtasks||[]).filter(x=>x && x.title);
+  if(!list.length) throw new Error('小タスクが返ってきませんでした');
+
+  const seen = new Set();
+  const sources = (cand?.groundingMetadata?.groundingChunks||[]).map(c=>c.web).filter(w=>w && w.uri && !seen.has(w.uri) && seen.add(w.uri)).slice(0,6)
+    .map(w=>({title:w.title||w.uri, uri:w.uri}));
+  const str = (v, n) => String(v ?? '').slice(0, n);
+  return {
+    note,
+    brief:{issue:str(data.issue,200), hypothesis:str(data.hypothesis,300), goal:str(data.goal,200),
+      research:(data.research||[]).filter(r=>r && r.q).slice(0,8).map(r=>({q:str(r.q,120), a:str(r.a,500)})), sources},
+    subs:list.map(x => ({id:uid(), title:str(x.title,80), result:str(x.result,120),
+      minutes:Math.min(240, Math.max(5, Math.round((+x.minutes||30)/5)*5)), outdoor:!!x.outdoor, done:false}))
+  };
+}
+
+function briefHtml(br){
+  if(!br) return '';
+  const res = br.research?.length ? `<div style="margin-top:6px"><b>調べた結果</b><ul>${br.research.map(r=>`<li><b style="min-width:0">${esc(r.q)}</b>:${esc(r.a)}</li>`).join('')}</ul></div>` : '';
+  const src = br.sources?.length ? `<div style="margin-top:4px" class="muted">出典: ${br.sources.map(s=>`<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join('、')}</div>` : '';
+  return `<details class="brief" open><summary>論点・仮説・ゴール</summary>
+    <div style="margin-top:4px"><b>論点</b>${esc(br.issue)}</div>
+    <div><b>仮説</b>${esc(br.hypothesis)}</div>
+    <div><b>ゴール</b>${esc(br.goal)}</div>${res}${src}</details>`;
+}
+
+async function listModels(){
+  const key = $('#s-key').value.trim();
+  if(!key){ toast('先にAPIキーを入れてください'); return; }
+  try{
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', {headers:{'x-goog-api-key':key}});
+    const j = await res.json();
+    if(!res.ok) throw new Error(j.error?.message || res.status);
+    const names = (j.models||[])
+      .filter(m => (m.supportedGenerationMethods||[]).includes('generateContent'))
+      .map(m => m.name.replace(/^models\//,''))
+      .filter(n => /flash/.test(n) && !/image|tts|audio|live|embedding/.test(n));
+    if(!names.length) throw new Error('使えるモデルが見つかりませんでした');
+    fillModels(names, names.find(n=>!/preview|exp/.test(n)) || names[0]);
+    toast('モデル一覧を取得しました');
+  }catch(e){ toast('取得失敗: '+e.message); }
+}
+function fillModels(names, sel){
+  $('#s-model').innerHTML = names.map(n=>`<option ${n===sel?'selected':''}>${esc(n)}</option>`).join('');
+}
+
+/* ---------- 履歴(大タスク提案の参考。タイトルと月だけ) ---------- */
+function addHistory(t, kind){
+  S.history = S.history || [];
+  S.history.push({title:t.title, month:ymd(new Date()).slice(0,7), kind});
+  if(S.history.length > 200) S.history = S.history.slice(-200);
+}
+
+/* ---------- スワイプで削除 ---------- */
+let undoFn = null, undoTimer = null;
+function showUndo(msg, fn){
+  undoFn = fn; $('#undo-msg').textContent = msg; $('#undo').classList.remove('hidden');
+  clearTimeout(undoTimer); undoTimer = setTimeout(()=>{ $('#undo').classList.add('hidden'); undoFn = null; }, 5000);
+}
+$('#undo-btn').onclick = () => { if(undoFn) undoFn(); undoFn = null; $('#undo').classList.add('hidden'); };
+
+function removeSub(taskId, subId){
+  const t = S.tasks.find(x=>x.id===taskId); if(!t) return;
+  const i = t.subs.findIndex(x=>x.id===subId); if(i<0) return;
+  const [gone] = t.subs.splice(i,1); save(); rerender();
+  showUndo(`「${gone.title}」を消しました`, () => { t.subs.splice(i,0,gone); save(); rerender(); });
+}
+function removeIdea(i){
+  const [gone] = ideas.splice(i,1);
+  S.history = S.history || []; S.history.push({title:gone.title, month:ymd(new Date()).slice(0,7), kind:'rejected'}); save();
+  renderIdeas();
+  showUndo(`「${gone.title}」を消しました`, () => { ideas.splice(i,0,gone); S.history.pop(); save(); renderIdeas(); });
+}
+function rerender(){
+  renderTasks();
+  if(!$('#tab-plan').classList.contains('hidden')) renderPlan();
+}
+(() => {
+  let el=null, x0=0, y0=0, dx=0, locked=null;
+  document.addEventListener('pointerdown', e => {
+    const t = e.target.closest('[data-swipe]'); if(!t) return;
+    if(e.target.matches('input[type=text]:focus, input[type=number]:focus')) return;
+    el=t; x0=e.clientX; y0=e.clientY; dx=0; locked=null;
+  });
+  document.addEventListener('pointermove', e => {
+    if(!el) return;
+    const mx = e.clientX-x0, my = e.clientY-y0;
+    if(locked===null && (Math.abs(mx)>8 || Math.abs(my)>8)) locked = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+    if(locked!=='x') return;
+    dx = Math.min(0, mx); el.classList.add('dragging');
+    el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(Math.max(.3, 1 + dx/250));
+  });
+  const end = () => {
+    if(!el) return;
+    const target = el; el.classList.remove('dragging');
+    if(locked==='x' && dx < -Math.min(110, target.offsetWidth*0.35)){
+      target.style.transform = 'translateX(-110%)'; target.style.opacity = '0';
+      const key = target.dataset.swipe;
+      setTimeout(() => {
+        const [kind, a, b] = key.split(':');
+        if(kind==='sub') removeSub(a, b);
+        if(kind==='idea') removeIdea(+a);
+      }, 170);
+    } else { target.style.transform = ''; target.style.opacity = ''; }
+    el = null;
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  // 横スワイプ中にクリック扱いにならないようにする
+  document.addEventListener('click', e => { if(Math.abs(dx) > 8 && e.target.closest('[data-swipe]')){ e.stopPropagation(); e.preventDefault(); dx = 0; } }, true);
+})();
+
+/* ---------- 大タスクの提案(送るのは日付とタスクのタイトルだけ) ---------- */
+let ideas = [];
+async function geminiJson(prompt, system){
+  const {apiKey, model} = S.settings;
+  if(!apiKey) throw new Error('設定でAPIキーを入れてください');
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+    body:JSON.stringify({systemInstruction:{parts:[{text:system}]}, contents:[{role:'user', parts:[{text:prompt}]}],
+      generationConfig:{responseMimeType:'application/json'}})
+  });
+  const j = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error('AIエラー: ' + (j.error?.message || res.status));
+  const text = j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('') || '';
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  try{ return JSON.parse(text.slice(a, b+1)); }catch(e){ throw new Error('AIの返答を読めませんでした'); }
+}
+async function suggestIdeas(){
+  const btn = $('#idea-btn'); btn.disabled = true; btn.textContent = '考え中…';
+  try{
+    const h = S.history || [];
+    const fmt = arr => arr.length ? arr.map(x=>`・${x.title}(${x.month})`).join('\n') : 'なし';
+    const prompt =
+`今日は${ymd(new Date())}です。
+この人が次に取り組むとよさそうな「大タスク」(数時間〜数日かかるまとまった用事)を4つ提案してください。
+季節の行事・季節の家事・この時期に準備しておくと楽なことと、これまでのタスクの傾向の両方から考えてください。
+毎年やっていそうなことが去年の同じ時期にあれば優先してください。
+
+今あるタスク:
+${fmt(S.tasks.map(t=>({title:t.title, month:'進行中'})))}
+完了したタスク:
+${fmt(h.filter(x=>x.kind==='done').slice(-40))}
+いらないと言われた提案(同じものや似たものは出さない):
+${fmt(h.filter(x=>x.kind==='rejected').slice(-30))}
+
+今あるタスクと重複しないこと。
+返答は次の形のJSONだけにしてください。
+{"ideas":[{"title":"大タスク名","reason":"なぜ今か(1文)","note":"補足メモ(任意)","due":"YYYY-MM-DD または空"}]}`;
+    const data = await geminiJson(prompt, 'あなたは生活と仕事の段取りを手伝うアシスタントです。具体的で、すぐ動ける提案をします。');
+    ideas = (data.ideas||[]).filter(x=>x && x.title).slice(0,6).map(x=>({
+      title:String(x.title).slice(0,60), reason:String(x.reason||'').slice(0,150), note:String(x.note||'').slice(0,200),
+      due:/^\d{4}-\d{2}-\d{2}$/.test(x.due||'') ? x.due : ''}));
+    if(!ideas.length) throw new Error('提案が返ってきませんでした');
+  }catch(e){ toast(e.message); }
+  btn.disabled = false; btn.textContent = 'もう一度提案';
+  renderIdeas();
+}
+function renderIdeas(){
+  $('#idea-list').innerHTML = ideas.length ? '<div style="margin-top:8px">' + ideas.map((x,i)=>`
+    <div class="idea" data-swipe="idea:${i}">
+      <div style="flex:1"><div class="task-title">${esc(x.title)}</div>
+        <div class="muted">${esc(x.reason)}${x.due?`・期限案 ${label(x.due)}`:''}</div></div>
+      <button class="ghost" data-idea="${i}">追加</button>
+    </div>`).join('') + '</div>' : '';
+}
+$('#idea-btn').onclick = suggestIdeas;
+$('#idea-list').addEventListener('click', e => {
+  const i = e.target.dataset.idea; if(i===undefined) return;
+  const x = ideas[+i];
+  S.tasks.push({id:uid(), title:x.title, note:x.note || x.reason, due:x.due, subs:[], created:Date.now()});
+  ideas.splice(+i,1); save(); renderIdeas(); renderTasks(); toast('タスクに追加しました');
+});
+
+/* ---------- 天気(Open-Meteo、位置だけを送る) ---------- */
+const WMO = c => c===0?['☀️','快晴']:c<=2?['🌤','晴れ']:c===3?['☁️','曇り']:c<=48?['🌫','霧']
+  :c<=57?['🌦','霧雨']:c<=67?['🌧','雨']:c<=77?['🌨','雪']:c<=82?['🌦','にわか雨']:c<=86?['🌨','にわか雪']:['⛈','雷雨'];
+const WET = c => c>=51;
+
+async function ensureWeather(force){
+  const w = S.weather; const st = S.settings;
+  const fresh = w && w.lat===st.lat && w.lon===st.lon && Date.now()-w.at < 3*3600e3;
+  if(fresh && !force){ renderWx(); return; }
+  try{
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}`+
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=16`;
+    const r = await fetch(u); const j = await r.json();
+    if(!r.ok) throw new Error(j.reason || r.status);
+    const d = j.daily;
+    S.weather = {at:Date.now(), lat:st.lat, lon:st.lon, days:d.time.map((t,i)=>({
+      date:t, code:d.weather_code[i], tmax:d.temperature_2m_max[i], tmin:d.temperature_2m_min[i], pop:d.precipitation_probability_max[i] ?? 0 }))};
+    save();
+  }catch(e){ toast('天気を取得できませんでした'); }
+  renderWx();
+}
+function renderWx(){
+  $('#wx-place').textContent = S.settings.place;
+  const w = S.weather;
+  if(!w){ $('#wx-strip').innerHTML='<span class="muted">天気データなし</span>'; $('#wx-time').textContent=''; return; }
+  const at = new Date(w.at); $('#wx-time').textContent = `${at.getHours()}:${pad(at.getMinutes())}取得`;
+  $('#wx-strip').innerHTML = w.days.map(d => { const [ic,tx]=WMO(d.code); const bad = d.pop>=S.settings.rain || WET(d.code);
+    return `<div class="d ${bad?'rain':''}"><div>${label(d.date)}</div><div class="ic">${ic}</div><div>${tx}</div>
+      <div>${Math.round(d.tmax)}/${Math.round(d.tmin)}℃</div><div>☔${d.pop}%</div></div>`; }).join('');
+}
+$('#wx-reload').onclick = () => ensureWeather(true).then(renderPlan);
+
+/* ---------- 予定の組み立て(端末内で計算) ---------- */
+function buildPlan(){
+  const st = S.settings;
+  const wx = Object.fromEntries((S.weather?.days||[]).map(d=>[d.date,d]));
+  const today = new Date(); today.setHours(0,0,0,0);
+  const horizon = 30; const days = [];
+  for(let i=1;i<=horizon;i++){ const d=new Date(today); d.setDate(d.getDate()+i); days.push(ymd(d)); }
+  const used = {}; const out = [];
+  const okFor = (s, date) => {
+    if(!s.outdoor) return true;
+    const w = wx[date]; if(!w) return true; // 予報外は不明扱い
+    return !(w.pop >= st.rain || WET(w.code));
+  };
+  const cap = date => isWeekend(date) ? +st.weCap : +st.wdCap;
+  const start = date => toMin(isWeekend(date) ? st.weStart : st.wdStart);
+  const tasks = [...S.tasks].sort((a,b) => (a.due||'9999') < (b.due||'9999') ? -1 : (a.due||'9999') > (b.due||'9999') ? 1 : a.created-b.created);
+  for(const t of tasks){
+    let minIdx = 0;
+    for(const s of t.subs){
+      if(s.done) continue;
+      let placed = null, late = false;
+      for(let pass=0; pass<2 && !placed; pass++){
+        for(let i=minIdx;i<days.length;i++){
+          const date = days[i];
+          if(pass===0 && t.due && date > t.due) break;
+          const u = used[date]||0; const c = cap(date);
+          const fits = u + s.minutes <= c || (u===0 && c>0);
+          if(fits && okFor(s,date)){ placed = {date, idx:i}; late = pass===1 && !!t.due; break; }
+        }
+      }
+      if(!placed){ out.push({t, s, date:null}); continue; }
+      const u = used[placed.date]||0;
+      out.push({t, s, date:placed.date, time:fromMin(start(placed.date)+u), late, wx:wx[placed.date]});
+      used[placed.date] = u + s.minutes; minIdx = placed.idx;
+    }
+  }
+  return out;
+}
+
+function calUrl(title, date, time, minutes, details){
+  const [y,m,d] = date.split('-'); const st = toMin(time); const en = st + minutes;
+  const day2 = new Date(+y, +m-1, +d + Math.floor(en/1440));
+  const f = (dt, mm) => `${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}T${pad(Math.floor(mm/60)%24)}${pad(mm%60)}00`;
+  const p = new URLSearchParams({action:'TEMPLATE', text:title, dates:`${f(new Date(+y,+m-1,+d),st)}/${f(day2,en%1440)}`, details, ctz:'Asia/Tokyo'});
+  return 'https://calendar.google.com/calendar/render?' + p.toString();
+}
+
+function renderPlan(){
+  const plan = buildPlan(); const el = $('#plan-list');
+  if(!plan.length){ el.innerHTML = '<p class="muted">分解済みの小タスクがありません。タスク画面で「AIで分解」を押してください。</p>'; return; }
+  const byDay = {}; const none = [];
+  plan.forEach(p => p.date ? (byDay[p.date] ||= []).push(p) : none.push(p));
+  let html = '';
+  for(const date of Object.keys(byDay).sort()){
+    const items = byDay[date]; const w = items[0].wx; const wtxt = w ? `${WMO(w.code)[0]} ☔${w.pop}%` : '<span class="muted">予報外</span>';
+    const [yy,mm,dd] = date.split('-').map(Number);
+    html += `<div class="day-h"><span>${label(date)}<a class="daylink" href="https://calendar.google.com/calendar/r/day/${yy}/${mm}/${dd}" target="_blank" rel="noopener">この日の予定を見る</a></span><span>${wtxt}</span></div><div class="card">`;
+    if(S.settings.group==='day'){
+      const total = items.reduce((a,p)=>a+p.s.minutes,0);
+      const title = items.length===1 ? items[0].s.title : `${items[0].t.title}ほか ${items.length}件`;
+      const det = items.map(p=>`・${p.s.title}(${p.s.minutes}分)[${p.t.title}]`).join('\n');
+      html += items.map(p=>row(p,false)).join('') +
+        `<div class="row" style="margin-top:8px"><button class="btn" data-cal="${esc(calUrl(title,date,items[0].time,total,det))}">この日をまとめてカレンダーに追加(${total}分)</button></div>`;
+    } else {
+      html += items.map(p=>row(p,true)).join('');
+    }
+    html += '</div>';
+  }
+  if(none.length){
+    html += `<div class="day-h"><span>入れられなかった小タスク</span></div><div class="card">` +
+      none.map(p=>`<div class="plan"><div class="t">—</div><div class="b">${esc(p.s.title)}<div class="muted">${esc(p.t.title)}・${p.s.outdoor?'屋外の晴れ日が見つかりません':'上限時間が足りません'}</div></div></div>`).join('') + '</div>';
+  }
+  el.innerHTML = html;
+}
+function row(p, withBtn){
+  const u = calUrl(p.s.title, p.date, p.time, p.s.minutes, `タスク: ${p.t.title}` + (p.s.result ? `\n→ ${p.s.result}` : ''));
+  return `<div class="plan" style="padding:6px 0" data-swipe="sub:${p.t.id}:${p.s.id}">
+    <div class="t">${p.time}</div>
+    <div class="b">${esc(p.s.title)} ${p.s.outdoor?'<span class="chip out">屋外</span>':''}
+      <div class="muted">${esc(p.t.title)}・${p.s.minutes}分 ${p.late?'<span class="flag">期限を過ぎます</span>':''}</div></div>
+    ${withBtn?`<button class="ghost" data-cal="${esc(u)}">追加</button>`:''}
+  </div>`;
+}
+$('#plan-list').addEventListener('click', e => {
+  const u = e.target.dataset.cal; if(u) window.open(u, '_blank', 'noopener');
+});
+
+/* ---------- 設定 ---------- */
+function renderSettings(){
+  const s = S.settings;
+  $('#s-key').value=s.apiKey; fillModels([s.model], s.model);
+  $('#s-place').value=s.place; $('#s-lat').value=s.lat; $('#s-lon').value=s.lon; $('#s-rain').value=s.rain;
+  $('#s-wd-start').value=s.wdStart; $('#s-wd-cap').value=s.wdCap; $('#s-we-start').value=s.weStart; $('#s-we-cap').value=s.weCap;
+  $('#s-group').value=s.group;
+  $('#s-inst').value=s.inst; $('#s-search').checked=!!s.search; $('#s-calid').value=s.cals || s.calId;
+}
+$('#s-inst-reset').onclick = () => { $('#s-inst').value = DEFAULT_INST; toast('初期の指示に戻しました(保存で確定)'); };
+
+/* ---------- カレンダー(表示のみ。中身は読まない) ---------- */
+function calList(){
+  const raw = S.settings.cals || S.settings.calId || '';
+  return raw.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m = l.match(/^(\S+)(?:\s+(#[0-9a-fA-F]{6}))?/); return m ? {id:m[1], color:m[2]||''} : null; }).filter(Boolean);
+}
+function calSrc(){
+  const list = calList(); if(!list.length) return '';
+  const q = list.map(c => 'src='+encodeURIComponent(c.id) + (c.color ? '&color='+encodeURIComponent(c.color) : '')).join('&');
+  return `https://calendar.google.com/calendar/embed?${q}&ctz=Asia%2FTokyo&mode=${$('#cal-mode').value}&showPrint=0&showTitle=0&showTabs=0&showCalendars=0`;
+}
+// 一度作ったiframeは使い回し、タブを開くたびに読み直さない
+function renderCal(force){
+  const box = $('#cal-box'); const src = calSrc();
+  if(!src){ box.innerHTML = '<p class="muted">設定で「表示するカレンダー」を入れると、ここに表示されます。</p>'; return; }
+  let f = box.querySelector('iframe');
+  if(f && f.dataset.src === src && !force) return;
+  if(!f){
+    box.innerHTML = '<div class="cal-loading" id="cal-loading">読み込み中…</div><iframe class="frame" referrerpolicy="no-referrer" loading="eager"></iframe>';
+    f = box.querySelector('iframe');
+    f.onload = () => { const l = $('#cal-loading'); if(l) l.remove(); };
+  }
+  f.dataset.src = src; f.src = src;
+}
+$('#cal-mode').onchange = () => renderCal();
+$('#cal-open').onclick = () => window.open('https://calendar.google.com/calendar/r', '_blank', 'noopener');
+$('#s-models').onclick = listModels;
+$('#s-save').onclick = () => {
+  const s = S.settings;
+  s.apiKey=$('#s-key').value.trim(); s.model=$('#s-model').value||s.model;
+  s.place=$('#s-place').value.trim()||'現在地'; s.lat=+$('#s-lat').value; s.lon=+$('#s-lon').value; s.rain=+$('#s-rain').value||40;
+  s.wdStart=$('#s-wd-start').value||'19:00'; s.wdCap=+$('#s-wd-cap').value||0; s.weStart=$('#s-we-start').value||'10:00'; s.weCap=+$('#s-we-cap').value||0;
+  s.group=$('#s-group').value;
+  s.inst=$('#s-inst').value.trim() || DEFAULT_INST; s.search=$('#s-search').checked; s.cals=$('#s-calid').value.trim(); s.calId=''; if(!$('#tab-cal').classList.contains('hidden') || $('#cal-box iframe')) renderCal();
+  save(); toast('保存しました');
+};
+$('#s-export').onclick = () => {
+  const data = {...S, settings:{...S.settings, apiKey:''}}; // キーは書き出さない
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,1)], {type:'application/json'}));
+  a.download = `tasks-${ymd(new Date())}.json`; a.click();
+};
+$('#s-import').onclick = () => $('#s-file').click();
+$('#s-file').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ const v = JSON.parse(await f.text()); if(!Array.isArray(v.tasks)) throw 0;
+    const key = S.settings.apiKey; S = {...structuredClone(DEF), ...v, settings:{...DEF.settings, ...v.settings, apiKey:key}};
+    save(); renderTasks(); renderSettings(); toast('読み込みました');
+  }catch(err){ toast('読み込めないファイルです'); }
+};
+
+renderTasks(); renderSettings();
+// カレンダーは裏で先に読み込んでおき、タブを開いたときに待たずに済むようにする
+setTimeout(() => { if(calSrc()) renderCal(); }, 1200);
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
